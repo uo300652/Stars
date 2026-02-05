@@ -234,6 +234,47 @@ export default class Canvas {
   }
 
   addListeners() {
+    this.canvas.addEventListener('click', e => {
+    // 1. Obtener coordenadas del clic relativas al canvas
+    const rect = this.canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
+    // 2. Convertir Píxeles -> Coordenadas de Mundo (Az/Alt)
+    // Revertimos la fórmula: px = (pos.x + i * skyWidth) * scale + offsetX
+    const clickAz = (mouseX - this.offsetX) / this.scale;
+    const clickY = (mouseY - this.offsetY) / this.scale;
+    const clickAlt = 90 - clickY;
+
+    let estrellaMasCercana = null;
+    let distanciaMinima = Infinity;
+    const tolerancia = 2; // Grados de tolerancia para el clic
+
+    // 3. Buscar en el array de estrellas
+    this.stars.forEach(star => {
+      // Calculamos la posición actual de la estrella (Az/Alt)
+      const pos = this.convertirPosicion(star.ra, star.dec, false);
+
+      // Calculamos la distancia pitagórica simple entre el clic y la estrella
+      const dx = clickAz - pos.x;
+      const dy = clickAlt - pos.alt;
+      const distancia = Math.sqrt(dx * dx + dy * dy);
+
+      if (distancia < distanciaMinima && distancia < tolerancia) {
+        distanciaMinima = distancia;
+        estrellaMasCercana = star;
+      }
+    });
+
+    // 4. Resultado
+    if (estrellaMasCercana) {
+      console.log(` Estrella encontrada: ${estrellaMasCercana.proper || 'Sin nombre (HR ' + estrellaMasCercana.id + ')'}`);
+      console.log(` Magnitud: ${estrellaMasCercana.mag}`);
+    } else {
+      console.log("No hay ninguna estrella cerca de esa posición.");
+    }
+  });
+
     window.addEventListener('resize', () => this.resize());
 
     this.canvas.addEventListener('wheel', e => {
