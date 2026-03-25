@@ -3,6 +3,11 @@ Overview
 
 This project is a web-based planetarium simulator designed to calculate and display the exact real-time position of the user's "vision zone" in the night sky. By processing the user's local time and precise geographic coordinates, the application accurately renders the visible stars, planets, and constellations directly overhead, providing an immersive astronomical experience.
 
+___
+# 🚧 Project Status: Work in Progress (WIP) 🚧
+This project is currently under active development. Features are subject to change, servers may restart without prior notice, and you might encounter occasional bugs. Suggestions and contributions are highly welcome!
+___
+
 ## ✨ Features
 
   - Real-Time Vision Zone: Dynamically calculates and displays the observable sky based on the user's current location and device time.
