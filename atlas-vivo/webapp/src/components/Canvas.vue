@@ -1,20 +1,12 @@
 <script setup>
   import { ref, onMounted } from 'vue'
-  import Canvas from '../js/Canvas.js'
+  import Sky from '../js/Sky.js'
 
   const canvasRef = ref(null)
-  let sky = null
 
   onMounted(async () => {
-    sky = new Canvas(canvasRef.value)
-
-    sky.resize()
-
-    sky.limpiar()
+    const sky = new Sky(canvasRef.value)
     await sky.init()
-    sky.dibujarEstrellas()
-    sky.dibujarConstelaciones()
-    sky.addListeners()
   })
 </script>
 

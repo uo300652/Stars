@@ -19,5 +19,8 @@ export default defineConfig({
     allowedHosts: [
       'seo-representatives-similar-knock.trycloudflare.com'
     ],
+    proxy: {
+      '/api': 'http://localhost:3000',
+    },
   },
 })

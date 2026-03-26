@@ -32,4 +32,4 @@ def convertir_hyg_a_json(input_file, output_file):
         print(f"Hubo un error: {e}")
 
 # Uso del script
-convertir_hyg_a_json('hygdata_v42.csv.gz', '../../public/estrellas.json')
+convertir_hyg_a_json('hygdata_v42.csv.gz', 'estrellas.json')

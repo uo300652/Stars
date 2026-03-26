@@ -1,3 +1,6 @@
+import { readFile } from 'fs/promises';
+import { dirname, join } from 'path';
+import { fileURLToPath } from 'url';
 import { Router } from 'express';
 import {
   equatorialToHorizontal,
@@ -7,9 +10,37 @@ import {
   greenwichMeanSiderealTime,
   findNearestStar,
   type Star,
+  type ConstellationCollection,
 } from '@atlas-vivo/star-engine';
 
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const dataDir = join(__dirname, '../../data');
+
+// Load catalog data once at startup — no per-request I/O
+const stars: Star[] = JSON.parse(
+  await readFile(join(dataDir, 'estrellas.json'), 'utf-8')
+);
+const constellations: ConstellationCollection = JSON.parse(
+  await readFile(join(dataDir, 'constellations.lines.json'), 'utf-8')
+);
+
 const router = Router();
+
+/**
+ * GET /api/engine/stars
+ * Returns the full HYG star catalog.
+ */
+router.get('/stars', (_req, res) => {
+  res.json(stars);
+});
+
+/**
+ * GET /api/engine/constellations
+ * Returns the constellation line GeoJSON.
+ */
+router.get('/constellations', (_req, res) => {
+  res.json(constellations);
+});
 
 /**
  * GET /api/engine/time?lon=<degrees>
@@ -48,12 +79,11 @@ router.post('/position', (req, res) => {
 
 /**
  * POST /api/engine/find-star
- * Finds the nearest star to a clicked sky position.
- * Body: { stars: Star[], clickAz, clickAlt, lat, lon, tolerance? }
+ * Finds the nearest star to a clicked sky position using the server-side catalog.
+ * Body: { clickAz, clickAlt, lat, lon, tolerance? }
  */
 router.post('/find-star', (req, res) => {
-  const { stars, clickAz, clickAlt, lat, lon, tolerance } = req.body as {
-    stars: Star[];
+  const { clickAz, clickAlt, lat, lon, tolerance } = req.body as {
     clickAz: number;
     clickAlt: number;
     lat: number;
