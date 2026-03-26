@@ -5,10 +5,11 @@ import {
 } from '@atlas-vivo/star-engine';
 
 /**
- * Draws the sky onto a canvas.
+ * Draws the sky onto a canvas using perspective (rectilinear) projection.
  *
  * Responsibility: rendering only — reads camera state and catalog data, never
- * mutates them. Coordinate projection is delegated to @atlas-vivo/star-engine.
+ * mutates them. Coordinate projection is delegated to @atlas-vivo/star-engine
+ * (equatorial → horizontal) and Camera (horizontal → screen).
  */
 export default class Renderer {
   constructor(canvas, camera, ubicacion) {
@@ -21,55 +22,81 @@ export default class Renderer {
   // ─── Coordinate Projection ──────────────────────────────────────────────────
 
   /**
-   * Projects equatorial coordinates to canvas world space (Az/Alt + x/y).
-   *
-   * @param {number}  ra       - Right Ascension (hours when esGrados=false, degrees otherwise)
+   * Converts equatorial coordinates to local horizontal (az/alt).
+   * @param {number}  ra       - Right Ascension in hours (or degrees when esGrados=true)
    * @param {number}  dec      - Declination in degrees
-   * @param {boolean} esGrados - Pass true when ra is already in degrees (constellation data)
+   * @param {boolean} esGrados - true when ra is already in degrees (constellation data)
+   * @returns {{ az: number, alt: number }}
    */
-  #project(ra, dec, esGrados = false) {
+  #toHorizontal(ra, dec, esGrados = false) {
     const raDeg = esGrados ? ra : ra * 15;
     const lst = localSiderealTime(utcNow(), this.ubicacion.lon);
     return equatorialToHorizontal(raDeg, dec, this.ubicacion.lat, lst);
   }
 
+  /** Returns the canvas CSS dimensions used for all projection math. */
+  #dims() {
+    return { w: this.canvas.clientWidth, h: this.canvas.clientHeight };
+  }
+
   // ─── Draw calls ─────────────────────────────────────────────────────────────
 
   #clear() {
+    const { w, h } = this.#dims();
     this.ctx.fillStyle = '#050510';
-    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    this.ctx.fillRect(0, 0, w, h);
   }
 
   #drawGrid() {
-    const { ctx, canvas, camera } = this;
+    const { ctx, camera } = this;
+    const { w, h } = this.#dims();
     ctx.save();
     ctx.font = '10px Arial';
 
-    // Altitude lines (almucantars)
-    for (let alt = -90; alt <= 90; alt += 15) {
-      const y = (90 - alt) * camera.scale + camera.offsetY;
-      ctx.strokeStyle = alt === 0 ? 'rgba(0, 255, 0, 0.5)' : 'rgba(255, 255, 255, 0.1)';
+    // Altitude circles (almucantars)
+    for (let alt = -75; alt <= 90; alt += 15) {
+      ctx.strokeStyle = alt === 0
+        ? 'rgba(0, 255, 0, 0.5)'
+        : 'rgba(255, 255, 255, 0.1)';
       ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(canvas.width, y);
+      let first = true;
+      for (let az = 0; az <= 360; az += 2) {
+        const p = camera.project(az, alt, w, h);
+        if (!p) { first = true; continue; }
+        if (first) { ctx.moveTo(p.x, p.y); first = false; }
+        else ctx.lineTo(p.x, p.y);
+      }
       ctx.stroke();
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-      ctx.fillText(`${alt}°`, 10, y - 2);
+
+      // Label near the camera's look direction (always visible on screen)
+      if (alt !== 0) {
+        const lp = camera.project(camera.az, alt, w, h);
+        if (lp) {
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+          ctx.fillText(`${alt}°`, lp.x + 4, lp.y - 2);
+        }
+      }
     }
 
-    // Azimuth lines and cardinal points
+    // Azimuth meridians and cardinal labels
     const cardinales = { 0: 'N', 90: 'E', 180: 'S', 270: 'W' };
     for (let az = 0; az < 360; az += 30) {
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
-      for (let i = -1; i <= 1; i++) {
-        const x = (az + i * camera.skyWidth) * camera.scale + camera.offsetX;
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, canvas.height);
-        ctx.stroke();
-        if (cardinales[az]) {
+      ctx.beginPath();
+      let first = true;
+      for (let alt = -80; alt <= 80; alt += 5) {
+        const p = camera.project(az, alt, w, h);
+        if (!p) { first = true; continue; }
+        if (first) { ctx.moveTo(p.x, p.y); first = false; }
+        else ctx.lineTo(p.x, p.y);
+      }
+      ctx.stroke();
+
+      if (cardinales[az]) {
+        const cp = camera.project(az, 2, w, h);
+        if (cp) {
           ctx.fillStyle = 'white';
-          ctx.fillText(cardinales[az], x + 5, 90 * camera.scale + camera.offsetY - 5);
+          ctx.fillText(cardinales[az], cp.x + 3, cp.y - 3);
         }
       }
     }
@@ -78,83 +105,106 @@ export default class Renderer {
   }
 
   #drawGround() {
-    const { ctx, canvas, camera } = this;
-    const horizonY = 90 * camera.scale + camera.offsetY;
-    if (horizonY > canvas.height) return;
+    const { ctx, camera } = this;
+    const { w, h } = this.#dims();
 
-    ctx.save();
-    const grad = ctx.createLinearGradient(0, horizonY, 0, canvas.height);
+    // Sample 360 points along the horizon (slightly below alt=0 to avoid gaps)
+    const pts = [];
+    for (let az = 0; az < 360; az += 1) {
+      const p = camera.project(az, -0.1, w, h);
+      if (p) pts.push(p);
+    }
+
+    if (pts.length === 0) return;
+
+    // Sort left-to-right so the polygon traces the horizon curve correctly
+    pts.sort((a, b) => a.x - b.x);
+
+    const topY = Math.min(...pts.map(p => p.y));
+    const grad = ctx.createLinearGradient(0, topY, 0, h);
     grad.addColorStop(0, 'rgba(10, 10, 20, 0.9)');
     grad.addColorStop(1, '#000000');
 
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, horizonY, canvas.width, canvas.height - horizonY);
+    ctx.save();
 
+    // Ground polygon: bottom-left corner → horizon curve → bottom-right corner
+    ctx.beginPath();
+    ctx.moveTo(Math.min(pts[0].x, 0), h);
+    pts.forEach(p => ctx.lineTo(p.x, p.y));
+    ctx.lineTo(Math.max(pts[pts.length - 1].x, w), h);
+    ctx.closePath();
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    // Horizon line
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    pts.forEach(p => ctx.lineTo(p.x, p.y));
     ctx.strokeStyle = '#004400';
     ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(0, horizonY);
-    ctx.lineTo(canvas.width, horizonY);
     ctx.stroke();
+
     ctx.restore();
   }
 
   #drawStars(stars) {
     const { ctx, camera } = this;
+    const { w, h } = this.#dims();
+
     stars.forEach(star => {
-      const pos = this.#project(star.ra, star.dec);
-      const radius = Math.max(0.2, (6.5 - star.mag) * (camera.scale * 0.05));
-      const opacity = pos.alt > -5 ? 1 : 0.1;
+      const { az, alt } = this.#toHorizontal(star.ra, star.dec);
+      if (alt < -10) return;  // well below horizon — skip
 
+      const pos = camera.project(az, alt, w, h);
+      if (!pos) return;  // behind camera
+
+      // Stars are point sources: base size depends on magnitude, not on zoom.
+      // A small zoom-dependent bonus keeps them visible at wide FOV without
+      // making them enormous discs at narrow FOV.
+      const base   = Math.max(0.8, (6.5 - star.mag) * 1.1);
+      const bonus  = Math.max(0, (6.5 - star.mag) * (h / camera.fov) * 0.04);
+      const radius = Math.min(base + bonus, base * 1.5);
+      const opacity = alt > -5 ? 1 : 0.3;
       ctx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
-
-      for (let i = -1; i <= 1; i++) {
-        const px = (pos.x + i * camera.skyWidth) * camera.scale + camera.offsetX;
-        const py = pos.y * camera.scale + camera.offsetY;
-
-        if (px > -10 && px < this.canvas.width + 10) {
-          ctx.beginPath();
-          ctx.arc(px, py, radius, 0, Math.PI * 2);
-          ctx.fill();
-        }
-      }
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
+      ctx.fill();
     });
   }
 
   #drawConstellations(lines) {
     const { ctx, camera } = this;
+    const { w, h } = this.#dims();
+
     ctx.save();
     ctx.strokeStyle = 'rgba(100, 150, 255, 0.4)';
     ctx.lineWidth = 1.5;
 
     lines.forEach(feature => {
       const coords = feature.geometry.coordinates;
-      const segmentos = Array.isArray(coords[0][0]) ? coords : [coords];
+      const segments = Array.isArray(coords[0][0]) ? coords : [coords];
 
-      segmentos.forEach(segmento => {
-        for (let i = -1; i <= 1; i++) {
-          ctx.beginPath();
-          let prevX = null;
+      segments.forEach(segment => {
+        ctx.beginPath();
+        let penDown = false;
 
-          segmento.forEach((punto, index) => {
-            const pos = this.#project(punto[0], punto[1], true);
-            const px = (pos.x + i * camera.skyWidth) * camera.scale + camera.offsetX;
-            const py = pos.y * camera.scale + camera.offsetY;
+        segment.forEach(punto => {
+          const { az, alt } = this.#toHorizontal(punto[0], punto[1], true);
+          const pos = camera.project(az, alt, w, h);
 
-            // Anti-tear: cut the line when it wraps across the 360°/0° boundary
-            const saltoDetectado = prevX !== null && Math.abs(pos.x - prevX) > 180;
+          if (!pos) {
+            penDown = false;  // behind camera: lift pen to avoid cross-screen lines
+            return;
+          }
+          if (!penDown) {
+            ctx.moveTo(pos.x, pos.y);
+            penDown = true;
+          } else {
+            ctx.lineTo(pos.x, pos.y);
+          }
+        });
 
-            if (index === 0 || saltoDetectado) {
-              ctx.moveTo(px, py);
-            } else {
-              ctx.lineTo(px, py);
-            }
-
-            prevX = pos.x;
-          });
-
-          ctx.stroke();
-        }
+        ctx.stroke();
       });
     });
 

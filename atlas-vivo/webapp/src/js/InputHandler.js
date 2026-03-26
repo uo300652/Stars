@@ -65,7 +65,12 @@ export default class InputHandler {
 
   #onMouseMove(e) {
     if (!this.isDragging) return;
-    this.camera.pan(e.clientX - this.lastX, e.clientY - this.lastY);
+    const dx = e.clientX - this.lastX;
+    const dy = e.clientY - this.lastY;
+    // Convert pixel delta to degrees using current FOV.
+    // Drag right → decrease az (reveals West); drag down → increase alt (reveals sky above).
+    const degsPerPx = this.camera.fov / this.canvas.clientHeight;
+    this.camera.pan(-dx * degsPerPx, dy * degsPerPx);
     this.lastX = e.clientX;
     this.lastY = e.clientY;
   }
@@ -77,7 +82,7 @@ export default class InputHandler {
   #onWheel(e) {
     e.preventDefault();
     const factor = e.deltaY < 0 ? 1.1 : 0.9;
-    this.camera.zoomAt(e.offsetX, e.offsetY, factor);
+    this.camera.zoom(factor);
   }
 
   async #onClick(e) {
@@ -90,12 +95,11 @@ export default class InputHandler {
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
 
-    // Raw az can be negative or > 360 when the user has panned and clicks on a
-    // wrapped copy of the sky (the renderer draws i = -1 and i = +1 copies).
-    // Normalize to [0, 360) so the server finds the same star the user sees.
-    const rawAz   = (mouseX - this.camera.offsetX) / this.camera.scale;
-    const clickAz = ((rawAz % 360) + 360) % 360;
-    const clickAlt = 90 - (mouseY - this.camera.offsetY) / this.camera.scale;
+    // Reverse-project the click position through the spherical camera to get az/alt
+    const { az: clickAz, alt: clickAlt } = this.camera.screenToSky(
+      mouseX, mouseY,
+      this.canvas.clientWidth, this.canvas.clientHeight
+    );
 
     await this.onStarClick(clickAz, clickAlt);
   }
