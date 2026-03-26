@@ -13,9 +13,12 @@ import SkyApi from './SkyApi.js';
  * @param {HTMLCanvasElement} canvasElement
  * @param {{ onStarSelected?: (star) => void, onLocationResolved?: (loc) => void }} callbacks
  */
+const LOCATION_LERP = 0.05;
+
 export default class Sky {
   constructor(canvasElement, { onStarSelected, onLocationResolved } = {}) {
     this._onStarSelected = onStarSelected ?? null;
+    this._starClickInFlight = false;
 
     this.ubicacion = new Ubicacion({ onResolved: onLocationResolved });
     this.camera = new Camera();
@@ -58,19 +61,37 @@ export default class Sky {
     this.#resize();
   }
 
+  #lerpLocation() {
+    const u = this.ubicacion;
+    u.lat += (u._targetLat - u.lat) * LOCATION_LERP;
+    // Shortest-path interpolation across the ±180° meridian
+    let dLon = u._targetLon - u.lon;
+    if (dLon >  180) dLon -= 360;
+    if (dLon < -180) dLon += 360;
+    u.lon += dLon * LOCATION_LERP;
+  }
+
   #animate() {
+    this.#lerpLocation();
     this.renderer.render(this.stars, this.constellationLines);
     requestAnimationFrame(this.#animate.bind(this));
   }
 
   async #onStarClick(clickAz, clickAlt) {
-    const result = await SkyApi.findNearestStar(
-      clickAz,
-      clickAlt,
-      this.ubicacion.lat,
-      this.ubicacion.lon
-    );
-
-    this._onStarSelected?.(result?.star ?? null);
+    if (this._starClickInFlight) return;
+    this._starClickInFlight = true;
+    try {
+      const result = await SkyApi.findNearestStar(
+        clickAz,
+        clickAlt,
+        this.ubicacion.lat,
+        this.ubicacion.lon
+      );
+      this._onStarSelected?.(result?.star ?? null);
+    } catch (e) {
+      if (e.name !== 'AbortError') console.error('Star lookup failed:', e);
+    } finally {
+      this._starClickInFlight = false;
+    }
   }
 }
