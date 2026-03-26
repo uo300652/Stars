@@ -16,11 +16,18 @@ export default class SkyApi {
   }
 
   static async findNearestStar(clickAz, clickAlt, lat, lon) {
-    const res = await fetch('/api/engine/find-star', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ clickAz, clickAlt, lat, lon }),
-    });
-    return res.json();
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    try {
+      const res = await fetch('/api/engine/find-star', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clickAz, clickAlt, lat, lon }),
+        signal: controller.signal,
+      });
+      return await res.json();
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 }

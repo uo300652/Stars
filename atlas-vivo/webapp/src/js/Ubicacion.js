@@ -14,16 +14,20 @@ export default class Ubicacion {
     this.nombreLugar = 'California';
     this.lat = 37.4220; // default coordinates
     this.lon = -122.0841;
+    // Animation targets — Sky.js lerps lat/lon toward these each frame
+    this._targetLat = this.lat;
+    this._targetLon = this.lon;
     this._onResolved = onResolved ?? null;
   }
 
   pedirUbicacion() {
     navigator.geolocation.getCurrentPosition(
       async position => {
-        this.lat = position.coords.latitude;
-        this.lon = position.coords.longitude;
-        this.nombreLugar = await this.#obtenerCiudad(this.lat, this.lon);
-        this._onResolved?.({ name: this.nombreLugar, lat: this.lat, lon: this.lon });
+        // Set targets, not current values — Sky.js will lerp smoothly toward them
+        this._targetLat = position.coords.latitude;
+        this._targetLon = position.coords.longitude;
+        this.nombreLugar = await this.#obtenerCiudad(this._targetLat, this._targetLon);
+        this._onResolved?.({ name: this.nombreLugar, lat: this._targetLat, lon: this._targetLon });
       },
       error => {
         console.error('No se pudo obtener la ubicación', error);

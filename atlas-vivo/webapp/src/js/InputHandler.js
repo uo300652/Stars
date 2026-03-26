@@ -20,6 +20,8 @@ export default class InputHandler {
     this.isDragging = false;
     this.lastX = 0;
     this.lastY = 0;
+    this._dragStartX = 0;
+    this._dragStartY = 0;
 
     // Bind once so the same references can be removed in detach()
     this._onMouseDown = this.#onMouseDown.bind(this);
@@ -28,6 +30,7 @@ export default class InputHandler {
     this._onWheel = this.#onWheel.bind(this);
     this._onClick = this.#onClick.bind(this);
     this._onResize = this.onResize;
+    this._onBlur = () => { this.isDragging = false; };
   }
 
   attach() {
@@ -37,6 +40,7 @@ export default class InputHandler {
     window.addEventListener('mousemove', this._onMouseMove);
     window.addEventListener('mouseup', this._onMouseUp);
     window.addEventListener('resize', this._onResize);
+    window.addEventListener('blur', this._onBlur);
   }
 
   detach() {
@@ -46,6 +50,7 @@ export default class InputHandler {
     window.removeEventListener('mousemove', this._onMouseMove);
     window.removeEventListener('mouseup', this._onMouseUp);
     window.removeEventListener('resize', this._onResize);
+    window.removeEventListener('blur', this._onBlur);
   }
 
   // ─── Handlers ───────────────────────────────────────────────────────────────
@@ -54,6 +59,8 @@ export default class InputHandler {
     this.isDragging = true;
     this.lastX = e.clientX;
     this.lastY = e.clientY;
+    this._dragStartX = e.clientX;
+    this._dragStartY = e.clientY;
   }
 
   #onMouseMove(e) {
@@ -74,12 +81,20 @@ export default class InputHandler {
   }
 
   async #onClick(e) {
+    // Suppress clicks that followed a drag (displacement > 8px)
+    const dx = e.clientX - this._dragStartX;
+    const dy = e.clientY - this._dragStartY;
+    if (dx * dx + dy * dy > 64) return;
+
     const rect = this.canvas.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
 
-    // Pixels → world coordinates (Az / Alt)
-    const clickAz = (mouseX - this.camera.offsetX) / this.camera.scale;
+    // Raw az can be negative or > 360 when the user has panned and clicks on a
+    // wrapped copy of the sky (the renderer draws i = -1 and i = +1 copies).
+    // Normalize to [0, 360) so the server finds the same star the user sees.
+    const rawAz   = (mouseX - this.camera.offsetX) / this.camera.scale;
+    const clickAz = ((rawAz % 360) + 360) % 360;
     const clickAlt = 90 - (mouseY - this.camera.offsetY) / this.camera.scale;
 
     await this.onStarClick(clickAz, clickAlt);
