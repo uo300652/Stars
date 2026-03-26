@@ -7,22 +7,27 @@
  * Time and coordinate math has been moved to @atlas-vivo/star-engine.
  */
 export default class Ubicacion {
-  constructor() {
+  /**
+   * @param {{ onResolved?: (loc: { name: string, lat: number, lon: number }) => void }} options
+   */
+  constructor({ onResolved } = {}) {
     this.nombreLugar = 'California';
     this.lat = 37.4220; // default coordinates
     this.lon = -122.0841;
+    this._onResolved = onResolved ?? null;
   }
 
-  async pedirUbicacion() {
+  pedirUbicacion() {
     navigator.geolocation.getCurrentPosition(
       async position => {
         this.lat = position.coords.latitude;
         this.lon = position.coords.longitude;
-        console.log(`Latitud: ${this.lat}, Longitud: ${this.lon}`);
         this.nombreLugar = await this.#obtenerCiudad(this.lat, this.lon);
+        this._onResolved?.({ name: this.nombreLugar, lat: this.lat, lon: this.lon });
       },
       error => {
         console.error('No se pudo obtener la ubicación', error);
+        this._onResolved?.({ name: this.nombreLugar, lat: this.lat, lon: this.lon });
       }
     );
   }

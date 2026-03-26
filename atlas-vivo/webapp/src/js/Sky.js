@@ -8,11 +8,16 @@ import SkyApi from './SkyApi.js';
  * Orchestrates the sky chart.
  *
  * Responsibility: wiring — owns the sub-components and the catalog data,
- * drives the render loop, and exposes a minimal public API to Canvas.vue.
+ * drives the render loop, and exposes a minimal public API to SkyCanvas.vue.
+ *
+ * @param {HTMLCanvasElement} canvasElement
+ * @param {{ onStarSelected?: (star) => void, onLocationResolved?: (loc) => void }} callbacks
  */
 export default class Sky {
-  constructor(canvasElement) {
-    this.ubicacion = new Ubicacion();
+  constructor(canvasElement, { onStarSelected, onLocationResolved } = {}) {
+    this._onStarSelected = onStarSelected ?? null;
+
+    this.ubicacion = new Ubicacion({ onResolved: onLocationResolved });
     this.camera = new Camera();
     this.renderer = new Renderer(canvasElement, this.camera, this.ubicacion);
     this.input = new InputHandler(
@@ -28,7 +33,7 @@ export default class Sky {
   }
 
   async init() {
-    await this.ubicacion.pedirUbicacion();
+    this.ubicacion.pedirUbicacion();
 
     [this.stars, this.constellationLines] = await Promise.all([
       SkyApi.fetchStars(),
@@ -66,10 +71,6 @@ export default class Sky {
       this.ubicacion.lon
     );
 
-    if (result) {
-      console.log(`Estrella: ${result.star.proper || 'Sin nombre (HR ' + result.star.id + ')'}, Mag: ${result.star.mag}`);
-    } else {
-      console.log('No hay ninguna estrella cerca de esa posición.');
-    }
+    this._onStarSelected?.(result?.star ?? null);
   }
 }
