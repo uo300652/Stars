@@ -1,20 +1,31 @@
-import Ubicacion from './Ubicacion';
+import Ubicacion from './Ubicacion.js';
+import {
+  equatorialToHorizontal,
+  localSiderealTime,
+  utcNow,
+  findNearestStar,
+} from '@atlas-vivo/star-engine';
 
+/**
+ * Manages the star-chart canvas.
+ *
+ * Responsibility: rendering only — pan, zoom, draw calls, and event wiring.
+ * All astronomical math is delegated to @atlas-vivo/star-engine.
+ */
 export default class Canvas {
   constructor(canvasElement) {
     this.ubicacion = new Ubicacion();
     this.canvas = canvasElement;
     this.ctx = this.canvas.getContext('2d');
 
-    // El "mundo" lógico: 360° de Azimut (X) y 180° de Altitud (Y)
-    this.skyWidth = 360; 
+    // Logical sky world: 360° Azimuth (X) × 180° Altitude (Y)
+    this.skyWidth = 360;
     this.skyHeight = 180;
 
     this.stars = [];
     this.lineasData = [];
 
-    // Configuración de vista inicial
-    this.scale = 5; 
+    this.scale = 5;
     this.offsetX = 0;
     this.offsetY = 0;
 
@@ -33,54 +44,37 @@ export default class Canvas {
     await this.cargarEstrellas();
     await this.cargarConstelaciones();
     this.resize();
-    this.animate(); // Iniciar loop de renderizado
+    this.animate();
   }
 
-  // --- Lógica de Proyección de Coordenadas ---
+  // ─── Coordinate Projection ────────────────────────────────────────────────
 
   /**
-   * Convierte RA/Dec a coordenadas locales (Azimut/Altitud)
-   * y luego a coordenadas de "mundo" para el Canvas.
+   * Projects a star's equatorial coordinates (RA/Dec) to canvas world space.
+   * Delegates all math to star-engine.
+   *
+   * @param {number} ra       - Right Ascension (hours if esGrados=false, degrees if true)
+   * @param {number} dec      - Declination in degrees
+   * @param {boolean} esGrados - Pass true when ra is already in degrees (constellation data)
    */
   convertirPosicion(ra, dec, esGrados = false) {
     const raDeg = esGrados ? ra : ra * 15;
-    const latRad = this.ubicacion.lat * Math.PI / 180;
-    const lst = this.ubicacion.horaSideralLocal(); // en grados
-
-    let ha = lst - raDeg;
-    if (ha < 0) ha += 360;
-    const haRad = ha * Math.PI / 180;
-    const decRad = dec * Math.PI / 180;
-
-    // Altitud
-    const sinAlt = Math.sin(decRad) * Math.sin(latRad) + Math.cos(decRad) * Math.cos(latRad) * Math.cos(haRad);
-    const altRad = Math.asin(sinAlt);
-    const alt = altRad * 180 / Math.PI;
-
-    // Azimut
-    const cosAz = (Math.sin(decRad) - Math.sin(altRad) * Math.sin(latRad)) / (Math.cos(altRad) * Math.cos(latRad));
-    let az = Math.acos(Math.max(-1, Math.min(1, cosAz))) * 180 / Math.PI;
-    if (Math.sin(haRad) > 0) az = 360 - az;
-
-    // Mapeo a nuestro espacio 2D: X = Azimut, Y = (90 - Altitud)
-    const x = az;
-    const y = 90 - alt; 
-
-    return { x, y, alt, az };
+    const lst = localSiderealTime(utcNow(), this.ubicacion.lon);
+    return equatorialToHorizontal(raDeg, dec, this.ubicacion.lat, lst);
   }
 
-  // --- Métodos de Dibujo ---
+  // ─── Drawing ──────────────────────────────────────────────────────────────
 
   limpiar() {
-    this.ctx.fillStyle = '#050510'; // Espacio profundo
+    this.ctx.fillStyle = '#050510';
     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
   }
 
   dibujarRejilla() {
     this.ctx.save();
     this.ctx.font = '10px Arial';
-    
-    // Líneas de Altitud
+
+    // Altitude lines (almucantars)
     for (let alt = -90; alt <= 90; alt += 15) {
       const y = (90 - alt) * this.scale + this.offsetY;
       this.ctx.strokeStyle = alt === 0 ? 'rgba(0, 255, 0, 0.5)' : 'rgba(255, 255, 255, 0.1)';
@@ -92,7 +86,7 @@ export default class Canvas {
       this.ctx.fillText(`${alt}°`, 10, y - 2);
     }
 
-    // Líneas de Azimut y Puntos Cardinales
+    // Azimuth lines and cardinal points
     const cardinales = { 0: 'N', 90: 'E', 180: 'S', 270: 'W' };
     for (let az = 0; az < 360; az += 30) {
       this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
@@ -104,7 +98,7 @@ export default class Canvas {
         this.ctx.stroke();
         if (cardinales[az]) {
           this.ctx.fillStyle = 'white';
-          this.ctx.fillText(cardinales[az], x + 5, (90 * this.scale) + this.offsetY - 5);
+          this.ctx.fillText(cardinales[az], x + 5, 90 * this.scale + this.offsetY - 5);
         }
       }
     }
@@ -119,11 +113,10 @@ export default class Canvas {
     const grad = this.ctx.createLinearGradient(0, horizonY, 0, this.canvas.height);
     grad.addColorStop(0, 'rgba(10, 10, 20, 0.9)');
     grad.addColorStop(1, '#000000');
-    
+
     this.ctx.fillStyle = grad;
     this.ctx.fillRect(0, horizonY, this.canvas.width, this.canvas.height - horizonY);
-    
-    // Línea del horizonte
+
     this.ctx.strokeStyle = '#004400';
     this.ctx.lineWidth = 2;
     this.ctx.beginPath();
@@ -137,11 +130,10 @@ export default class Canvas {
     this.stars.forEach(star => {
       const pos = this.convertirPosicion(star.ra, star.dec, false);
       const radius = Math.max(0.2, (6.5 - star.mag) * (this.scale * 0.05));
-      const opacity = pos.alt > -5 ? 1 : 0.1; // Se ven un poco bajo el horizonte para efecto visual
+      const opacity = pos.alt > -5 ? 1 : 0.1;
 
       this.ctx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
-      
-      // Dibujar con loop infinito horizontal
+
       for (let i = -1; i <= 1; i++) {
         const px = (pos.x + i * this.skyWidth) * this.scale + this.offsetX;
         const py = pos.y * this.scale + this.offsetY;
@@ -161,48 +153,40 @@ export default class Canvas {
     this.ctx.lineWidth = 1.5;
 
     this.lineasData.forEach(feature => {
-        const coords = feature.geometry.coordinates;
-        const segmentos = Array.isArray(coords[0][0]) ? coords : [coords];
+      const coords = feature.geometry.coordinates;
+      const segmentos = Array.isArray(coords[0][0]) ? coords : [coords];
 
-        segmentos.forEach(segmento => {
-            // Dibujamos 3 veces (-1, 0, 1) para permitir el scroll infinito horizontal
-            for (let i = -1; i <= 1; i++) {
-                this.ctx.beginPath();
-                let prevX = null; // Guardamos la X anterior del "mundo" (0-360)
+      segmentos.forEach(segmento => {
+        for (let i = -1; i <= 1; i++) {
+          this.ctx.beginPath();
+          let prevX = null;
 
-                segmento.forEach((punto, index) => {
-                    // 1. Convertimos RA/Dec a nuestro sistema local Az/Alt
-                    // punto[0] es RA/Longitud, punto[1] es Dec/Latitud
-                    const pos = this.convertirPosicion(punto[0], punto[1], true);
+          segmento.forEach((punto, index) => {
+            const pos = this.convertirPosicion(punto[0], punto[1], true);
+            const px = (pos.x + i * this.skyWidth) * this.scale + this.offsetX;
+            const py = pos.y * this.scale + this.offsetY;
 
-                    // 2. Calculamos la posición real en el canvas
-                    const px = (pos.x + i * this.skyWidth) * this.scale + this.offsetX;
-                    const py = pos.y * this.scale + this.offsetY;
+            // Anti-tear: cut the line when it wraps across the 360°/0° boundary
+            const saltoDetectado = prevX !== null && Math.abs(pos.x - prevX) > 180;
 
-                    // 3. Lógica Anti-Rayas: Detectar el salto de 360° a 0°
-                    // Si la distancia entre el punto actual y el anterior es más de medio cielo, 
-                    // significa que la línea debe cortarse y continuar al otro lado.
-                    const saltoDetectado = prevX !== null && Math.abs(pos.x - prevX) > 180;
-
-                    if (index === 0 || saltoDetectado) {
-                        this.ctx.moveTo(px, py);
-                    } else {
-                        this.ctx.lineTo(px, py);
-                    }
-
-                    // Actualizamos la X previa con el valor 0-360 puro (pos.x)
-                    prevX = pos.x;
-                });
-                
-                this.ctx.stroke();
+            if (index === 0 || saltoDetectado) {
+              this.ctx.moveTo(px, py);
+            } else {
+              this.ctx.lineTo(px, py);
             }
-        });
+
+            prevX = pos.x;
+          });
+
+          this.ctx.stroke();
+        }
+      });
     });
 
     this.ctx.restore();
-}
+  }
 
-  // --- Sistema de Renderizado y Eventos ---
+  // ─── Render Loop ──────────────────────────────────────────────────────────
 
   render() {
     this.limpiar();
@@ -227,53 +211,38 @@ export default class Canvas {
   zoomAt(x, y, factor) {
     const prevScale = this.scale;
     this.scale = Math.min(this.maxScale, Math.max(this.minScale, this.scale * factor));
-    
-    // Zoom centrado en el ratón
     this.offsetX = x - (x - this.offsetX) * (this.scale / prevScale);
     this.offsetY = y - (y - this.offsetY) * (this.scale / prevScale);
   }
 
+  // ─── Events ───────────────────────────────────────────────────────────────
+
   addListeners() {
     this.canvas.addEventListener('click', e => {
-    // 1. Obtener coordenadas del clic relativas al canvas
-    const rect = this.canvas.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
+      const rect = this.canvas.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
 
-    // 2. Convertir Píxeles -> Coordenadas de Mundo (Az/Alt)
-    // Revertimos la fórmula: px = (pos.x + i * skyWidth) * scale + offsetX
-    const clickAz = (mouseX - this.offsetX) / this.scale;
-    const clickY = (mouseY - this.offsetY) / this.scale;
-    const clickAlt = 90 - clickY;
+      // Pixels → world coordinates (Az/Alt)
+      const clickAz = (mouseX - this.offsetX) / this.scale;
+      const clickAlt = 90 - (mouseY - this.offsetY) / this.scale;
 
-    let estrellaMasCercana = null;
-    let distanciaMinima = Infinity;
-    const tolerancia = 2; // Grados de tolerancia para el clic
+      const result = findNearestStar(
+        this.stars,
+        clickAz,
+        clickAlt,
+        this.ubicacion.lat,
+        this.ubicacion.lon
+      );
 
-    // 3. Buscar en el array de estrellas
-    this.stars.forEach(star => {
-      // Calculamos la posición actual de la estrella (Az/Alt)
-      const pos = this.convertirPosicion(star.ra, star.dec, false);
-
-      // Calculamos la distancia pitagórica simple entre el clic y la estrella
-      const dx = clickAz - pos.x;
-      const dy = clickAlt - pos.alt;
-      const distancia = Math.sqrt(dx * dx + dy * dy);
-
-      if (distancia < distanciaMinima && distancia < tolerancia) {
-        distanciaMinima = distancia;
-        estrellaMasCercana = star;
+      if (result) {
+        const star = result.star;
+        console.log(`Estrella encontrada: ${star.proper || 'Sin nombre (HR ' + star.id + ')'}`);
+        console.log(`Magnitud: ${star.mag}`);
+      } else {
+        console.log('No hay ninguna estrella cerca de esa posición.');
       }
     });
-
-    // 4. Resultado
-    if (estrellaMasCercana) {
-      console.log(` Estrella encontrada: ${estrellaMasCercana.proper || 'Sin nombre (HR ' + estrellaMasCercana.id + ')'}`);
-      console.log(` Magnitud: ${estrellaMasCercana.mag}`);
-    } else {
-      console.log("No hay ninguna estrella cerca de esa posición.");
-    }
-  });
 
     window.addEventListener('resize', () => this.resize());
 
@@ -297,7 +266,7 @@ export default class Canvas {
       this.offsetX += dx;
       this.offsetY += dy;
 
-      // Normalizar offsetX para scroll infinito
+      // Infinite horizontal scroll: wrap at 360°
       const worldWidth = this.skyWidth * this.scale;
       this.offsetX = ((this.offsetX % worldWidth) + worldWidth) % worldWidth;
 
@@ -305,10 +274,11 @@ export default class Canvas {
       this.lastY = e.clientY;
     });
 
-    window.addEventListener('mouseup', () => this.isDragging = false);
+    window.addEventListener('mouseup', () => (this.isDragging = false));
   }
 
-  // --- Carga de Datos ---
+  // ─── Data Loading ─────────────────────────────────────────────────────────
+
   async cargarEstrellas() {
     const res = await fetch('/estrellas.json');
     this.stars = await res.json();
