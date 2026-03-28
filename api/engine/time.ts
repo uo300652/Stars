@@ -5,7 +5,7 @@ import {
   julianDate,
   greenwichMeanSiderealTime,
   localSiderealTime,
-} from '@atlas-vivo/star-engine';
+} from '../../star-engine/src/coordinates.js';
 
 export default function handler(req: IncomingMessage, res: ServerResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');

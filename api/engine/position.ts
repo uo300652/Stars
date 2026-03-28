@@ -3,7 +3,7 @@ import {
   utcNow,
   localSiderealTime,
   equatorialToHorizontal,
-} from '@atlas-vivo/star-engine';
+} from '../../star-engine/src/coordinates.js';
 
 export default function handler(req: IncomingMessage & { body: any }, res: ServerResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
