@@ -1,4 +1,4 @@
-import { equatorialToHorizontal, localSiderealTime, utcNow } from './coordinates';
+import { equatorialToHorizontal, localSiderealTime, utcNow } from './coordinates.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
