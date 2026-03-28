@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cat /c/Users/matia/Desktop/Stars_web/Stars/.github/workflows/*.yml)",
+      "Bash(npm install:*)",
+      "Bash(git -C /c/Users/matia/Desktop/Stars_web/Stars show HEAD:atlas-vivo/server/package.json)",
+      "Bash(git -C /c/Users/matia/Desktop/Stars_web/Stars show HEAD:atlas-vivo/server/tsconfig.json)",
+      "Bash(git -C /c/Users/matia/Desktop/Stars_web/Stars log --oneline --all)",
+      "Bash(git -C /c/Users/matia/Desktop/Stars_web/Stars show 8166b63 --stat)",
+      "Bash(git -C /c/Users/matia/Desktop/Stars_web/Stars status --short)",
+      "Bash(git:*)"
+    ]
+  }
+}
