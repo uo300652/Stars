@@ -17,7 +17,8 @@ export default defineConfig({
   server: {
     host: true,
     allowedHosts: [
-      'seo-representatives-similar-knock.trycloudflare.com'
+      'seo-representatives-similar-knock.trycloudflare.com',
+        'corn-playback-hindu-peer.trycloudflare.com'
     ],
     proxy: {
       '/api': 'http://localhost:3000',

@@ -23,7 +23,8 @@ const location = ref({ name: 'California', lat: 37.4220, lon: -122.0841 })
 .app {
   position: relative;
   width: 100vw;
-  height: 100vh;
+  height: 100vh;     /* fallback for older browsers */
+  height: 100dvh;    /* dynamic viewport height: shrinks when mobile address bar is visible */
   overflow: hidden;
   background: #000;
 }

@@ -145,7 +145,12 @@ defineEmits(['close'])
     min-width: unset;
     width: 100%;
     border-radius: 0.875rem 0.875rem 0 0;
-    padding: 1.25rem 1.25rem 2rem;
+    /* Extra bottom padding absorbs the iOS home-bar safe area */
+    padding: 1.25rem 1.25rem calc(1.25rem + env(safe-area-inset-bottom, 0px));
+    /* Prevent the panel from filling the whole screen in landscape */
+    max-height: 60dvh;
+    max-height: 60vh; /* fallback */
+    overflow-y: auto;
   }
 
   /* On mobile the enter/leave no longer needs translateX(-50%) */
