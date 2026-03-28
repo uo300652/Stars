@@ -5,16 +5,7 @@ import {
   equatorialToHorizontal,
 } from '@atlas-vivo/star-engine';
 
-function readBody(req: IncomingMessage): Promise<string> {
-  return new Promise((resolve, reject) => {
-    let data = '';
-    req.on('data', chunk => { data += chunk; });
-    req.on('end', () => resolve(data));
-    req.on('error', reject);
-  });
-}
-
-export default async function handler(req: IncomingMessage, res: ServerResponse) {
+export default function handler(req: IncomingMessage & { body: any }, res: ServerResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Content-Type', 'application/json');
 
@@ -26,7 +17,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     return;
   }
 
-  const { ra, dec, lat, lon } = JSON.parse(await readBody(req));
+  const { ra, dec, lat, lon } = req.body;
   const now = utcNow();
   const lst = localSiderealTime(now, lon);
   const raDeg = ra * 15;

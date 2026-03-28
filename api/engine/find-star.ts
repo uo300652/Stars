@@ -7,16 +7,7 @@ const stars: Star[] = JSON.parse(
   readFileSync(join(__dirname, '../../server/data/estrellas.json'), 'utf-8')
 );
 
-function readBody(req: IncomingMessage): Promise<string> {
-  return new Promise((resolve, reject) => {
-    let data = '';
-    req.on('data', chunk => { data += chunk; });
-    req.on('end', () => resolve(data));
-    req.on('error', reject);
-  });
-}
-
-export default async function handler(req: IncomingMessage, res: ServerResponse) {
+export default function handler(req: IncomingMessage & { body: any }, res: ServerResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Content-Type', 'application/json');
 
@@ -28,7 +19,7 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     return;
   }
 
-  const { clickAz, clickAlt, lat, lon, tolerance } = JSON.parse(await readBody(req));
+  const { clickAz, clickAlt, lat, lon, tolerance } = req.body;
   const result = findNearestStar(stars, clickAz, clickAlt, lat, lon, tolerance);
   res.end(JSON.stringify(result ?? null));
 }
