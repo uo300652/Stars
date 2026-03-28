@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'http';
-import { utcNow, localSiderealTime, equatorialToHorizontal } from '../_engine.js';
+import { utcNow, localSiderealTime, equatorialToHorizontal } from '../_engine';
 
 export default function handler(req: IncomingMessage & { body: any }, res: ServerResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
