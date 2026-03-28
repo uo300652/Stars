@@ -1,10 +1,5 @@
-import { readFileSync } from 'fs';
-import { join } from 'path';
 import type { IncomingMessage, ServerResponse } from 'http';
-
-const stars = JSON.parse(
-  readFileSync(join(__dirname, '../../server/data/estrellas.json'), 'utf-8')
-);
+import { stars } from '../_engine.js';
 
 export default function handler(_req: IncomingMessage, res: ServerResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');

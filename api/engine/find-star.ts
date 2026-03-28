@@ -1,11 +1,5 @@
-import { readFileSync } from 'fs';
-import { join } from 'path';
 import type { IncomingMessage, ServerResponse } from 'http';
-import { findNearestStar, type Star } from '../../star-engine/src/stars.js';
-
-const stars: Star[] = JSON.parse(
-  readFileSync(join(__dirname, '../../server/data/estrellas.json'), 'utf-8')
-);
+import { stars, findNearestStar } from '../_engine.js';
 
 export default function handler(req: IncomingMessage & { body: any }, res: ServerResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');

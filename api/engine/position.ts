@@ -1,9 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'http';
-import {
-  utcNow,
-  localSiderealTime,
-  equatorialToHorizontal,
-} from '../../star-engine/src/coordinates.js';
+import { utcNow, localSiderealTime, equatorialToHorizontal } from '../_engine.js';
 
 export default function handler(req: IncomingMessage & { body: any }, res: ServerResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -20,7 +16,6 @@ export default function handler(req: IncomingMessage & { body: any }, res: Serve
   const { ra, dec, lat, lon } = req.body;
   const now = utcNow();
   const lst = localSiderealTime(now, lon);
-  const raDeg = ra * 15;
-  const position = equatorialToHorizontal(raDeg, dec, lat, lst);
+  const position = equatorialToHorizontal(ra * 15, dec, lat, lst);
   res.end(JSON.stringify(position));
 }

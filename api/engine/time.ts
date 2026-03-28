@@ -1,11 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { URL } from 'url';
-import {
-  utcNow,
-  julianDate,
-  greenwichMeanSiderealTime,
-  localSiderealTime,
-} from '../../star-engine/src/coordinates.js';
+import { utcNow, julianDate, greenwichMeanSiderealTime, localSiderealTime } from '../_engine.js';
 
 export default function handler(req: IncomingMessage, res: ServerResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
