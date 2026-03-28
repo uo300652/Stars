@@ -1,0 +1,10 @@
+{
+  "buildCommand": "npm run build --workspace=webapp",
+  "outputDirectory": "webapp/dist",
+  "installCommand": "npm install",
+  "functions": {
+    "api/**/*.ts": {
+      "includeFiles": "server/data/**"
+    }
+  }
+}
